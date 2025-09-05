@@ -17,7 +17,7 @@ const app = express();
 
 // Middlewares
 app.use(cors({
-  origin: process.env.CLIENT_ORIGIN || "http://localhost:5173", // adjust based on frontend port
+  origin: process.env.CLIENT_ORIGIN || "http://localhost:8080", // adjust based on frontend port
   credentials: true
 }));
 app.use(express.json());
@@ -35,7 +35,7 @@ const server = http.createServer(app);
 import { Server } from "socket.io";
 const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_ORIGIN || "http://localhost:5173",
+    origin: process.env.CLIENT_ORIGIN || "http://localhost:8080",
     methods: ["GET", "POST"],
     credentials: true
   },

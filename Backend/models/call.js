@@ -5,13 +5,13 @@ const callSchema = new mongoose.Schema({
     participants: [
         { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true }
     ],
-    topic: { type: String },
+    topic: { type: String,  required: true },
     startTime: { type: Date, default: Date.now },
     endTime: { type: Date },
     status: {
         type: String,
-        enum: ["ongoing", "ended"],
-        default: "ongoing"
+        enum: ["waiting" ,"ongoing", "ended"],
+        default: "waiting"
     }
 }, { timestamps: true });
 

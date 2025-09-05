@@ -9,37 +9,45 @@ export const findMatch = async (req, res) => {
     const currentUser = await User.findById(userId);
     if (!currentUser) return res.status(404).json({ message: "User not found" });
 
-    const match = await User.findOne({
-      _id: { $ne: userId },
-      knownLanguage: currentUser.learningLanguage,
-      learningLanguage: currentUser.knownLanguage,
-      isAvailable: true,
-    });
+    // Look for waiting call
+    let call = await Call.findOne({
+      status: "waiting",
+      "participants.0": { $ne: userId }, 
+    }).populate("participants");
 
-    if (!match) {
-      return res.status(404).json({ message: "No match found" });
+    if (call) {
+      // second user joins
+      call.participants.push(currentUser._id);
+      call.status = "ongoing";
+      await call.save();
+
+      currentUser.isAvailable = false;
+      await currentUser.save();
+
+      return res.status(200).json({
+        message: "Match found 🎉",
+        match: call.participants.find(p => p._id.toString() !== userId.toString()),
+        callId: call._id,
+        topic: call.topic,   // 🔥 always return saved topic
+      });
     }
 
-    // mark unavailable
-    currentUser.isAvailable = false;
-    match.isAvailable = false;
-    await currentUser.save();
-    await match.save();
-
-    // create call with generated topic
-    const topic = generateTopic(); // simple topic generator
-    const call = await Call.create({
-      participants: [currentUser._id, match._id],
+    // First user creates new call
+    const topic = generateTopic(); // only here!
+    call = await Call.create({
+      participants: [currentUser._id],
       topic,
-      status: "ongoing", // or "ongoing" when call actually starts; keep here for simplicity
-      startTime: null,   // will be set by socket when second user joins or start-call emitted
+      status: "waiting",
+      startTime: null,
     });
 
-    res.status(200).json({
-      message: "Match found",
-      match,
+    currentUser.isAvailable = false;
+    await currentUser.save();
+
+    return res.status(200).json({
+      message: "Waiting for match",
       callId: call._id,
-      topic,
+      topic: call.topic,   // 🔥 return the same saved topic
     });
   } catch (error) {
     console.error("findMatch error:", error);
