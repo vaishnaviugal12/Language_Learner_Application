@@ -1,130 +1,85 @@
-// sockets/callSocket.js
 import Call from "../models/call.js";
 import User from "../Models/userModel.js";
 import { generateTopic } from "../utils/topicGenerator.js";
 
-let onlineUsers = {}; // socketId -> userId
+let onlineUsers = {};
 
 const callSocket = (io) => {
   io.on("connection", (socket) => {
     console.log("🔗 New client connected:", socket.id);
 
-    // ✅ Register user when connected
-    socket.on("register", async (userId) => {
-      onlineUsers[socket.id] = userId;
+    socket.on("register", ({ userId }) => {
+      if (!userId) return;
+      onlineUsers[userId.toString()] = socket.id;
       console.log(`✅ User ${userId} registered on socket ${socket.id}`);
     });
 
-    // ✅ Find a partner
     socket.on("findPartner", async (userId) => {
-      try {
-        const currentUser = await User.findById(userId);
-        if (!currentUser) return;
+      if (!userId) return;
+      const currentUser = await User.findById(userId);
+      if (!currentUser) return;
 
-        // Look for a waiting call
-        let call = await Call.findOne({
-          status: "waiting",
-          "participants.0": { $ne: userId },
-        }).populate("participants");
+      await Call.deleteMany({ status: "waiting", participants: { $in: [userId] } });
 
-        if (call) {
-          // Second user joins
-          call.participants.push(userId);
-          call.status = "ongoing";
-          await call.save();
+      let call = await Call.findOne({ status: "waiting", participants: { $not: { $elemMatch: { $eq: userId } } } });
 
-          const topic = call.topic;
+      if (call) {
+        call.participants.push(userId);
+        call.status = "ongoing";
+        await call.save();
+        await User.updateMany({ _id: { $in: call.participants } }, { $set: { isAvailable: false } });
 
-          const partnerId = call.participants.find(
-            (p) => p.toString() !== userId.toString()
-          );
+        const partnerId = call.participants.find(p => p.toString() !== userId.toString());
 
-          // Notify both users
-          io.to(socket.id).emit("matchFound", {
-            callId: call._id,
-            partnerId,
-            topic,
-          });
-
-          const partnerSocketId = getSocketIdByUserId(partnerId);
-          if (partnerSocketId) {
-            io.to(partnerSocketId).emit("matchFound", {
-              callId: call._id,
-              partnerId: userId,
-              topic,
-            });
-          }
-        } else {
-          // Create a new call
-          const topic = generateTopic();
-          call = await Call.create({
-            participants: [userId],
-            topic,
-            status: "waiting",
-          });
-
-          io.to(socket.id).emit("waiting", {
-            callId: call._id,
-            topic,
-          });
-        }
-      } catch (error) {
-        console.error("findPartner error:", error);
+        io.to(socket.id).emit("matchFound", { callId: call._id, partnerId: partnerId.toString(), topic: call.topic, initiatorId: partnerId.toString() });
+        const partnerSocketId = onlineUsers[partnerId.toString()];
+        if (partnerSocketId) io.to(partnerSocketId).emit("matchFound", { callId: call._id, partnerId: userId, topic: call.topic, initiatorId: partnerId.toString() });
+      } else {
+        const topic = generateTopic();
+        call = await Call.create({ participants: [userId], topic, status: "waiting" });
+        io.to(socket.id).emit("waiting", { callId: call._id, topic });
       }
     });
 
-    // ✅ WebRTC Signaling
-    socket.on("offer", ({ callId, offer, to }) => {
-      const targetSocketId = getSocketIdByUserId(to);
-      if (targetSocketId)
-        io.to(targetSocketId).emit("offer", { callId, offer });
+    // WebRTC signaling
+    ["offer", "answer", "iceCandidate"].forEach(evt => {
+      socket.on(evt, ({ callId, to, ...data }) => {
+        if (!to) return;
+        const targetSocketId = onlineUsers[to];
+        if (targetSocketId) io.to(targetSocketId).emit(evt, { callId, ...data });
+      });
     });
 
-    socket.on("answer", ({ callId, answer, to }) => {
-      const targetSocketId = getSocketIdByUserId(to);
-      if (targetSocketId)
-        io.to(targetSocketId).emit("answer", { callId, answer });
+    socket.on("chatMessage", (data) => {
+      const partnerSocketId = Object.values(onlineUsers).find(id => id !== socket.id);
+      if (partnerSocketId) io.to(partnerSocketId).emit("chatMessage", data);
     });
 
-    socket.on("iceCandidate", ({ callId, candidate, to }) => {
-      const targetSocketId = getSocketIdByUserId(to);
-      if (targetSocketId)
-        io.to(targetSocketId).emit("iceCandidate", { callId, candidate });
-    });
-
-    // ✅ End Call
     socket.on("endCall", async ({ callId, userId }) => {
-      try {
-        const call = await Call.findById(callId);
-        if (call) {
-          call.status = "ended";
-          await call.save();
-        }
-        io.to(socket.id).emit("callEnded");
-
-        call?.participants.forEach((p) => {
-          if (p.toString() !== userId.toString()) {
-            const partnerSocketId = getSocketIdByUserId(p);
-            if (partnerSocketId) io.to(partnerSocketId).emit("callEnded");
-          }
-        });
-      } catch (error) {
-        console.error("endCall error:", error);
+      const call = await Call.findById(callId);
+      if (call) {
+        call.status = "ended";
+        await call.save();
+        await User.updateMany({ _id: { $in: call.participants } }, { $set: { isAvailable: true } });
       }
+      socket.emit("callEnded");
+      call?.participants.forEach(p => {
+        if (p.toString() !== userId.toString()) {
+          const partnerSocketId = onlineUsers[p.toString()];
+          if (partnerSocketId) io.to(partnerSocketId).emit("callEnded");
+        }
+      });
     });
 
-    // ✅ Disconnect
-    socket.on("disconnect", () => {
+    socket.on("disconnect", async () => {
+      const userId = Object.keys(onlineUsers).find(uid => onlineUsers[uid] === socket.id);
+      if (userId) {
+        delete onlineUsers[userId];
+        await Call.deleteMany({ status: "waiting", participants: [userId] });
+      }
       console.log("❌ Client disconnected:", socket.id);
-      delete onlineUsers[socket.id];
     });
   });
-
-  const getSocketIdByUserId = (userId) => {
-    return Object.keys(onlineUsers).find(
-      (sid) => onlineUsers[sid] === userId.toString()
-    );
-  };
 };
 
 export default callSocket;

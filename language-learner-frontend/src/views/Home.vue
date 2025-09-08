@@ -4,9 +4,10 @@
     <v-app-bar app color="orange darken-2" dark>
       <v-toolbar-title class="font-weight-bold">Language Learner</v-toolbar-title>
       <v-spacer />
-      <v-btn text @click="loggedIn ? logout() : goToSignup()">
-  {{ loggedIn ? "Logout" : "Sign Up" }}
+      <v-btn text @click="isLoggedIn ? logoutUser() : goToSignup()">
+  {{ isLoggedIn ? "Logout" : "Sign Up" }}
 </v-btn>
+
 
     </v-app-bar>
 
@@ -109,32 +110,28 @@
 </template>
 
 <script>
-import api from "../services/api";
-import { clearLogin, isLoggedIn } from "../services/auth";
+import { mapGetters, mapActions } from "vuex";
 
 export default {
   name: "HomePage",
-  data: () => ({ loggedIn: false }),
-  created() {
-    this.loggedIn = isLoggedIn();
+  computed: {
+    ...mapGetters(["isLoggedIn", "user"]),
   },
   methods: {
+    ...mapActions(["logout"]),
     goToSignup() {
       this.$router.push("/register");
     },
     goToMatch() {
-    this.$router.push("/match");
+      this.$router.push("/match");
     },
-    logout() {
-      api.post("/user/logout").finally(() => {
-        clearLogin();
-        this.loggedIn = false;
-        this.$router.push("/login");
-      });
+    logoutUser() {
+      this.logout({ $cookies: this.$cookies });
+      this.$router.push("/login");
     },
   },
 };
+
 </script>
 
-<style scoped>
-</style>
+

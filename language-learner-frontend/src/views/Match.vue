@@ -1,4 +1,4 @@
- <template>
+<template>
   <v-container class="d-flex justify-center align-center" style="min-height: 90vh;">
     <v-card class="pa-6 text-center" max-width="500">
       <v-card-title class="headline font-weight-bold">
@@ -36,46 +36,74 @@
 </template>
 
 <script>
-import api from "../services/api";
-import socket from "../services/socket";
+import { initSocket } from "../services/socket";
 
 export default {
   name: "MatchPage",
-  data: () => ({
-    searching: false,
-    partnerFound: false,
-  }),
+  data() {
+    return {
+      searching: false,
+      partnerFound: false,
+      partnerData: null,
+      socket: null,
+    };
+  },
+  computed: {
+    userId() {
+      return this.$store.state.user?._id;
+    },
+  },
   mounted() {
-    // Listen for socket event only once
-    socket.on("matchFound", (data) => {
-      this.searching = false;
-      this.partnerFound = true;
-
-      // Save match info (optional)
-      localStorage.setItem("match", JSON.stringify(data));
-
-      // Redirect to call after delay
-      setTimeout(() => {
-        this.$router.push("/call");
-      }, 2000);
-    });
+    if (this.userId) {
+      this.socket = initSocket();
+      this.registerSocketEvents();
+    } else {
+      console.error("User not authenticated, redirecting to login.");
+      this.$router.push({ name: "Login" });
+    }
+  },
+  beforeUnmount() {
+    if (this.socket) {
+      this.socket.off("matchFound");
+      this.socket.off("waiting");
+      this.socket.disconnect();
+    }
   },
   methods: {
-    async findPartner() {
-      try {
-        this.searching = true;
-
-        // Option 1: API call
-        await api.get("/match/find");
-
-        // Option 2: Or socket event
-        socket.emit("findPartner");
-      } catch (err) {
-        this.searching = false;
-        alert(err.response?.data?.error || "Failed to find partner");
+    findPartner() {
+      if (!this.userId) {
+        this.$router.push({ name: "Login" });
+        return;
       }
+      this.searching = true;
+      this.socket.emit("findPartner", this.userId);
+    },
+    registerSocketEvents() {
+      this.socket.on("waiting", () => {
+        this.searching = true;
+        console.log("Waiting for partner...");
+      });
+
+      this.socket.on("matchFound", (data) => {
+        console.log("Matched:", data);
+        this.searching = false;
+        this.partnerFound = true;
+        this.partnerData = data;
+
+        setTimeout(() => {
+          const isInitiator = data.initiatorId === this.userId;
+          this.$router.push({
+            name: "Call",
+            params: { callId: data.callId },
+            query: {
+              partnerId: data.partnerId,
+              topic: data.topic,
+              isInitiator: isInitiator.toString(),
+            },
+          });
+        }, 1500);
+      });
     },
   },
 };
 </script>
-

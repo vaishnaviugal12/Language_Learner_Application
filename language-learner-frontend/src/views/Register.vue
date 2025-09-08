@@ -22,7 +22,7 @@
 </template>
 
 <script>
-import api from "../services/api";
+import { mapActions } from "vuex";
 
 export default {
   name: "RegisterPage",
@@ -36,9 +36,10 @@ export default {
     languages: ["English", "Spanish", "French", "German", "Japanese", "Chinese", "Hindi", "Arabic"],
   }),
   methods: {
-    async register() {
+    ...mapActions(["register"]),
+    async registerUser() {
       try {
-        await api.post("/user/register", {
+        await this.register({
           username: this.username,
           email: this.email,
           password: this.password,
@@ -54,5 +55,6 @@ export default {
     },
   },
 };
+
 </script>
 
