@@ -56,15 +56,15 @@ export default {
             },
           }
         );
-        // ✅ Redirect to Home instead of Progress
-        this.$router.push("/");
+        //  Redirect to Home instead of Progress
+        this.$router.push("/features");
       } catch (err) {
         console.error("Error submitting rating:", err);
       }
     },
     skipRating() {
-      // ✅ Skip also goes to Home
-      this.$router.push("/");
+      //  Skip also goes to Home
+      this.$router.push("/features");
     },
   },
 };
