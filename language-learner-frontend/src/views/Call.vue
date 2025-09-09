@@ -1,89 +1,77 @@
 <template>
   <v-container fluid class="call-container pa-0">
     <!-- Video Area -->
-    <div class="video-area">
-      <!-- Local Video -->
-      <video
-        v-if="localVideoReady"
-        ref="localVideo"
-        autoplay
-        muted
-        playsinline
-        class="video-box"
-      ></video>
-
+    <div class="video-area d-flex justify-center align-center">
       <!-- Remote Video -->
       <video
         v-if="remoteVideoReady"
         ref="remoteVideo"
         autoplay
         playsinline
-        class="video-box"
+        class="remote-video"
+      ></video>
+
+      <!-- Local Video PiP -->
+      <video
+        v-if="localVideoReady"
+        ref="localVideo"
+        autoplay
+        muted
+        playsinline
+        class="local-video"
       ></video>
     </div>
 
     <!-- Bottom Controls -->
-    <v-row class="controls-bar" justify="center" align="center">
-      <v-btn icon @click="toggleMic" :color="micOn ? 'orange darken-2' : 'grey'">
-        <v-icon>{{ micOn ? 'mdi-microphone' : 'mdi-microphone-off' }}</v-icon>
-      </v-btn>
+<div class="controls-bar d-flex justify-center align-center">
+  <v-btn icon class="control-btn" @click="toggleMic">
+    <v-icon class="control-icon">{{ micOn ? "mdi-microphone" : "mdi-microphone-off" }}</v-icon>
+  </v-btn>
 
-      <v-btn icon @click="toggleVideo" :color="videoOn ? 'orange darken-2' : 'grey'">
-        <v-icon>{{ videoOn ? 'mdi-video' : 'mdi-video-off' }}</v-icon>
-      </v-btn>
+  <v-btn icon class="control-btn" @click="toggleVideo">
+    <v-icon class="control-icon">{{ videoOn ? "mdi-video" : "mdi-video-off" }}</v-icon>
+  </v-btn>
 
-      <v-btn icon color="red darken-2" @click="endCall">
-        <v-icon>mdi-phone-hangup</v-icon>
-      </v-btn>
+  <v-btn icon class="hangup-btn" @click="endCall">
+    <v-icon class="control-icon">mdi-phone-hangup</v-icon>
+  </v-btn>
 
-      <v-btn icon @click="chatOpen = !chatOpen" color="orange darken-2">
-        <v-icon>mdi-chat</v-icon>
-      </v-btn>
-    </v-row>
+  <v-btn icon class="control-btn" @click="chatOpen = !chatOpen">
+    <v-icon class="control-icon">mdi-chat</v-icon>
+  </v-btn>
+</div>
 
     <!-- Chat Sidebar -->
     <v-slide-x-reverse-transition>
-      <v-card v-if="chatOpen" class="chat-sidebar elevation-12">
-        <!-- Chat Header -->
-        <v-toolbar dense flat color="orange darken-2">
-          <v-toolbar-title class="white--text">Chat</v-toolbar-title>
+      <v-card v-if="chatOpen" class="chat-sidebar">
+        <v-card-title>
+          Chat
           <v-spacer></v-spacer>
           <v-btn icon @click="chatOpen = false">
-            <v-icon class="white--text">mdi-close</v-icon>
+            <v-icon>mdi-close</v-icon>
           </v-btn>
-        </v-toolbar>
+        </v-card-title>
 
-        <!-- Messages -->
         <v-card-text class="chat-messages">
-          <div
-            v-for="(msg, index) in messages"
-            :key="index"
-            :class="['chat-bubble', msg.sender === 'You' ? 'sent' : 'received']"
-          >
-            <span>{{ msg.text }}</span>
+          <div v-for="(msg, index) in messages" :key="index">
+            <strong>{{ msg.sender }}:</strong> {{ msg.text }}
           </div>
         </v-card-text>
 
-        <!-- Input -->
-        <v-divider></v-divider>
-        <v-card-actions class="chat-input">
+        <v-card-actions>
           <v-text-field
             v-model="newMessage"
             placeholder="Type a message"
             @keyup.enter="sendMessage"
             dense
-            outlined
-            hide-details
-            color="orange"
-            class="flex-grow-1"
           ></v-text-field>
-          <v-btn color="orange darken-2" dark @click="sendMessage">Send</v-btn>
+          <v-btn color="orange" dark @click="sendMessage">Send</v-btn>
         </v-card-actions>
       </v-card>
     </v-slide-x-reverse-transition>
 
     <!-- Call Info -->
-    <v-card class="call-info pa-2 elevation-8">
+    <v-card class="call-info pa-2">
       <div><strong>Topic:</strong> {{ topic }}</div>
       <div><strong>Status:</strong> {{ connectionStatus }}</div>
     </v-card>
@@ -106,8 +94,9 @@ export default {
       partnerId: this.$route.query.partnerId,
       topic: this.$route.query.topic,
       connectionStatus: "Connecting...",
-      remoteVideoReady: false,
+      remoteVideoActive: false,
       localVideoReady: false,
+      remoteVideoReady: false,
       isInitiator: this.$route.query.isInitiator === "true",
 
       // UI controls
@@ -206,17 +195,25 @@ export default {
         );
         const answer = await this.peerConnection.createAnswer();
         await this.peerConnection.setLocalDescription(answer);
-        this.socket.emit("answer", { callId: this.callId, answer, to: this.partnerId });
+        this.socket.emit("answer", {
+          callId: this.callId,
+          answer,
+          to: this.partnerId,
+        });
       });
 
       this.socket.on("answer", async ({ callId, answer }) => {
         if (callId !== this.callId) return;
-        await this.peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+        await this.peerConnection.setRemoteDescription(
+          new RTCSessionDescription(answer)
+        );
       });
 
       this.socket.on("iceCandidate", async ({ callId, candidate }) => {
         if (callId !== this.callId || !candidate) return;
-        await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        await this.peerConnection.addIceCandidate(
+          new RTCIceCandidate(candidate)
+        );
       });
 
       this.socket.on("chatMessage", (data) => {
@@ -228,7 +225,10 @@ export default {
       this.socket.on("callEnded", () => {
         alert("Call ended by partner");
         this.cleanup();
-        this.$router.push("/");
+        this.$router.push({
+          path: "/rate",
+          query: { partnerId: this.partnerId },
+        });
       });
     },
 
@@ -246,11 +246,15 @@ export default {
     endCall() {
       this.socket.emit("endCall", { callId: this.callId, userId: this.userId });
       this.cleanup();
-      this.$router.push("/");
+      this.$router.push({
+        path: "/rate",
+        query: { partnerId: this.partnerId },
+      });
     },
 
     cleanup() {
-      if (this.localStream) this.localStream.getTracks().forEach((track) => track.stop());
+      if (this.localStream)
+        this.localStream.getTracks().forEach((track) => track.stop());
       if (this.peerConnection) this.peerConnection.close();
       if (this.socket) this.socket.disconnect();
     },
@@ -258,13 +262,17 @@ export default {
     toggleMic() {
       if (!this.localStream) return;
       this.micOn = !this.micOn;
-      this.localStream.getAudioTracks().forEach((track) => (track.enabled = this.micOn));
+      this.localStream
+        .getAudioTracks()
+        .forEach((track) => (track.enabled = this.micOn));
     },
 
     toggleVideo() {
       if (!this.localStream) return;
       this.videoOn = !this.videoOn;
-      this.localStream.getVideoTracks().forEach((track) => (track.enabled = this.videoOn));
+      this.localStream
+        .getVideoTracks()
+        .forEach((track) => (track.enabled = this.videoOn));
     },
   },
 };
@@ -276,99 +284,94 @@ export default {
   color: white;
   height: 100vh;
   position: relative;
-  overflow: hidden;
 }
 
 .video-area {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 30px; /* space between videos */
-  width: 80%;
-  max-width: 1200px;
-  height: 60%;
-  margin: 60px auto 0; /* margin from top and centered */
+  flex: 1;
+  position: relative;
+  width: 100%;
+  height: 100%;
 }
 
-.video-box {
-  flex: 1;
-  max-width: 45%; /* each video takes ~45% of container */
+.remote-video {
+  width: 100%;
   height: 100%;
   object-fit: cover;
-  border: 2px solid #ff9800;
-  border-radius: 12px;
+  background-color: black;
+}
+
+.local-video {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  width: 200px;
+  height: 150px;
+  object-fit: cover;
+  border: 2px solid white;
+  border-radius: 8px;
 }
 
 .controls-bar {
   position: absolute;
-  bottom: 20px;
+  bottom: 10px;
   left: 50%;
   transform: translateX(-50%);
-  background-color: rgba(30, 30, 30, 0.85);
-  border-radius: 50px;
-  padding: 10px 20px;
-  z-index: 10;
+  background-color: rgba(0, 0, 0, 0.8);
+  padding: 8px 12px;
+  border-radius: 30px;
 }
 
-/* Chat Styles */
 .chat-sidebar {
   position: absolute;
   top: 0;
   right: 0;
-  width: 320px;
+  width: 300px;
   height: 100%;
-  background-color: #ffffff; /* white background */
+  background-color: #fff;
+  color: black;
   display: flex;
   flex-direction: column;
-  z-index: 20;
-  border-left: 3px solid #ff9800;
+  z-index: 10;
 }
 
 .chat-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-}
-
-.chat-bubble {
-  max-width: 75%;
-  padding: 10px 15px;
-  margin: 5px 0;
-  border-radius: 20px;
-  word-wrap: break-word;
-}
-
-.sent {
-  align-self: flex-end;
-  background-color: #ff9800; /* orange bubble */
-  color: black; /* black text */
-  border-bottom-right-radius: 0;
-}
-
-.received {
-  align-self: flex-start;
-  background-color: #e0e0e0; /* light grey bubble */
-  color: black;
-  border-bottom-left-radius: 0;
-}
-
-.chat-input {
-  padding: 8px 10px;
-  display: flex;
-  align-items: center;
+  padding: 8px;
 }
 
 .call-info {
   position: absolute;
-  top: 15px;
-  left: 15px;
-  background-color: rgba(30, 30, 30, 0.8);
-  padding: 8px 15px;
-  border-radius: 10px;
+  top: 10px;
+  left: 10px;
+  background-color: rgba(0, 0, 0, 0.6);
+  padding: 6px 12px;
+  border-radius: 8px;
   color: white;
   font-size: 14px;
-  z-index: 10;
 }
+/* Ensure icons are visible */
+.control-btn {
+  background-color: rgba(255, 255, 255, 0.1);
+  margin: 0 6px;
+}
+
+.control-btn:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.control-icon {
+  color: white !important;
+  font-size: 28px;
+}
+
+.hangup-btn {
+  background-color: #e53935 !important; /* red button */
+  margin: 0 6px;
+}
+
+.hangup-btn:hover {
+  background-color: #d32f2f !important;
+}
+
 </style>

@@ -9,6 +9,7 @@ import userRouter from './routes/userRouter.js'; // Uncommented and added
 import matchrouter from './routes/matchRoutes.js';
 import iceRouter from './routes/iceRoutes.js';
 import callSocket from './socket/callSocket.js';
+import ratingRoutes from './routes/ratingroutes.js';
 import http from "http";
 
 dotenv.config();
@@ -27,6 +28,8 @@ app.use(cookieParser());
 app.use("/api/user", userRouter); // Mount user routes
 app.use("/api/match",matchrouter); // matching the suer
 app.use("/api/ice-servers", iceRouter);
+
+app.use("/api/ratings", ratingRoutes);
 
 // Create HTTP server to attach Socket.IO
 const server = http.createServer(app);

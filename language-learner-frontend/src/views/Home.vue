@@ -22,7 +22,7 @@
           <p class="subtitle-1 mb-6">
             Improve your fluency through real-time chat and live video calls with learners worldwide.
           </p>
-          <v-btn large color="orange darken-2" dark @click="goToMatch">
+          <v-btn large color="orange darken-2" dark @click="goToFeatures">
             <v-icon left>mdi-play-circle-outline</v-icon>
             Get Started
           </v-btn>
@@ -122,8 +122,8 @@ export default {
     goToSignup() {
       this.$router.push("/register");
     },
-    goToMatch() {
-      this.$router.push("/match");
+    goToFeatures() {
+      this.$router.push("/features");
     },
     logoutUser() {
       this.logout({ $cookies: this.$cookies });
